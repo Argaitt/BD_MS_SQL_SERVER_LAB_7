@@ -135,3 +135,33 @@ go
 EXECUTE MULTIPLE_QUANTITY_UP_TWICE;
 drop procedure MULTIPLE_QUANTITY_UP_TWICE;
 go
+
+--3.	Написать запросы, которые, будучи выполненными параллельно, обеспечивали бы следующий эффект:
+--a.	первый запрос должен считать количество выданных на руки и возвращённых в библиотеку книг и не зависеть от запросов на обновление таблицы «subscriptions» (не ждать их завершения);
+--b.	второй запрос должен инвертировать значения поля «sb_is_active» таблицы subscriptions с «Y» на «N» и наоборот и не зависеть от первого запроса (не ждать его завершения).
+
+select @@SPID as session_id
+set implicit_transactions on
+set transaction isolation level read uncommitted;
+begin transaction
+
+select COUNT(sb_id) as inactive
+from subscriptions
+where sb_is_active = 'N'
+
+select COUNT(sb_id) as active
+from subscriptions
+where sb_is_active = 'Y'
+commit transaction
+
+
+select @@SPID as session_id
+set implicit_transactions on 
+begin transaction 
+update subscriptions
+set [sb_is_active] =
+case
+	when [sb_is_active] = 'Y' THEN 'N'
+	when [sb_is_active] = 'N' THEN 'Y'
+end;--waitfor delay '00:00:10';
+commit transaction
