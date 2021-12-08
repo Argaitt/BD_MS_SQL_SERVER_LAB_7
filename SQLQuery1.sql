@@ -165,3 +165,54 @@ case
 	when [sb_is_active] = 'N' THEN 'Y'
 end;--waitfor delay '00:00:10';
 commit transaction
+go
+--5.	Написать код, в котором запрос, инвертирующий значения поля «sb_is_active» таблицы 
+--«subscriptions» с «Y» на «N» и наоборот, будет иметь максимальные шансы на успешное 
+--завершение в случае возникновения ситуации взаимной блокировки с другими транзакциями.
+set DEADLOCK_PRIORITY 10;
+update subscriptions
+set [sb_is_active] =
+case
+	when [sb_is_active] = 'Y' THEN 'N'
+	when [sb_is_active] = 'N' THEN 'Y'
+end;
+set DEADLOCK_PRIORITY normal;
+go
+--6.	Создать на таблице «subscriptions» триггер, определяющий уровень изолированности 
+--транзакции, в котором сейчас проходит операция обновления, и отменяющий операцию, 
+--если уровень изолированности транзакции отличен от REPEATABLE READ.
+create trigger [subscriptions_upd_trans]
+on subscriptions
+after insert
+as 
+	DECLARE @isolation_level NVARCHAR(50);
+	SET @isolation_level =
+	(
+	 SELECT [transaction_isolation_level]
+	 FROM [sys].[dm_exec_sessions]
+	 WHERE [session_id] = @@SPID
+	);
+	IF (@isolation_level != 3)
+	 BEGIN
+	 RAISERROR ('Please, switch your transaction to REPEATABLE READ isolation
+	 level and rerun this INSERT again.', 16, 1);
+	 ROLLBACK TRANSACTION;
+	 RETURN
+ END;
+ go
+
+ drop trigger [subscriptions_upd_trans];
+ go
+
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+INSERT INTO [subscriptions]
+ ([sb_book],
+ [sb_start],
+ [sb_finish],
+ [sb_is_active],
+ [sb_subscriber])
+VALUES (1,
+ GETDATE(),
+ GETDATE(),
+ N'Y',
+ 1);
